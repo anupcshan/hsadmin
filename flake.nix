@@ -73,6 +73,7 @@
                 ProtectHome = true;
                 ReadWritePaths = [ "/var/lib/hsadmin" ];
                 StateDirectory = "hsadmin";
+                Environment = [ "HOME=/var/lib/hsadmin" ];
               };
             };
           };
