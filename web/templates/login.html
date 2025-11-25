@@ -1,0 +1,77 @@
+{{define "login.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Headscale Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
+
+    {{template "layout-styles" .}}
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="min-h-screen flex items-center justify-center px-4">
+        <div class="max-w-md w-full">
+            <!-- Logo and Title -->
+            <div class="text-center mb-8">
+                <!-- Tailscale-style logo dots -->
+                <div class="flex justify-center mb-4">
+                    <svg width="48" height="48" viewBox="0 0 23 23" fill="none" class="text-gray-100">
+                        <circle opacity="0.2" cx="3.4" cy="3.25" r="2.7" fill="currentColor"></circle>
+                        <circle cx="3.4" cy="11.3" r="2.7" fill="currentColor"></circle>
+                        <circle opacity="0.2" cx="3.4" cy="19.5" r="2.7" fill="currentColor"></circle>
+                        <circle cx="11.5" cy="11.3" r="2.7" fill="currentColor"></circle>
+                        <circle cx="11.5" cy="19.5" r="2.7" fill="currentColor"></circle>
+                        <circle opacity="0.2" cx="11.5" cy="3.25" r="2.7" fill="currentColor"></circle>
+                        <circle opacity="0.2" cx="19.5" cy="3.25" r="2.7" fill="currentColor"></circle>
+                        <circle cx="19.5" cy="11.3" r="2.7" fill="currentColor"></circle>
+                        <circle opacity="0.2" cx="19.5" cy="19.5" r="2.7" fill="currentColor"></circle>
+                    </svg>
+                </div>
+                <h1 class="text-3xl font-semibold text-gray-100 mb-2">Headscale Admin</h1>
+                <p class="text-gray-400">Sign in to manage your network</p>
+            </div>
+
+            <!-- Login Card -->
+            <div class="bg-gray-800 border border-gray-700 rounded-lg shadow-xl p-8">
+                <div class="space-y-6">
+                    <!-- Info Message -->
+                    <div class="bg-gray-700 border border-gray-600 rounded-lg p-4">
+                        <div class="flex items-start gap-3">
+                            <svg class="w-5 h-5 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" x2="12" y1="16" y2="12"></line>
+                                <line x1="12" x2="12.01" y1="8" y2="8"></line>
+                            </svg>
+                            <div class="text-sm text-gray-300">
+                                Sign in with your OIDC provider to access the admin interface. Only authorized administrators can access this application.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sign In Button -->
+                    <a href="{{.AuthURL}}"
+                       class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg text-center transition-colors">
+                        Sign in with SSO
+                    </a>
+
+                    <!-- Additional Info -->
+                    <div class="text-xs text-gray-500 text-center">
+                        Protected by OIDC authentication
+                    </div>
+                </div>
+            </div>
+
+            <!-- Help Text -->
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-500">
+                    Need access? Contact your administrator to be added to the authorized users list.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+{{end}}

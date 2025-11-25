@@ -1,0 +1,2 @@
+# Ignore all test runtime artifacts
+.testoutput/

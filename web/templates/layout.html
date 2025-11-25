@@ -1,0 +1,222 @@
+{{define "layout-styles"}}
+<style>
+        /* Custom styling to match Tailscale */
+        .navigation-link {
+            position: relative;
+        }
+        .navigation-link-active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0.75rem;
+            right: 0.75rem;
+            height: 2px;
+            background-color: currentColor;
+        }
+        /* Table styling */
+        .tb {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .tb thead th {
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #9ca3af;
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid #374151;
+        }
+        .tb tbody tr {
+            border-bottom: 1px solid #374151;
+        }
+        .tb tbody td {
+            padding: 1rem 1.5rem;
+        }
+        /* Alert animation */
+        @keyframes slide-in {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .animate-slide-in {
+            animation: slide-in 0.3s ease-out;
+        }
+        /* Toast notification styling */
+        #toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-width: 24rem;
+        }
+        .toast {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: start;
+            gap: 0.75rem;
+            animation: slideIn 0.3s ease-out;
+        }
+        .toast.error {
+            background-color: #7f1d1d;
+            border: 1px solid #991b1b;
+            color: #fca5a5;
+        }
+        .toast.success {
+            background-color: #14532d;
+            border: 1px solid #166534;
+            color: #86efac;
+        }
+        .toast.info {
+            background-color: #1e3a8a;
+            border: 1px solid #1e40af;
+            color: #93c5fd;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .toast-close {
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        .toast-close:hover {
+            opacity: 1;
+        }
+    </style>
+{{end}}
+
+{{define "layout-header"}}
+    <!-- Toast/Alert Container for OOB swaps -->
+    <div id="alert-container" class="fixed top-4 right-4 z-50 w-96 space-y-2"></div>
+
+    <!-- Header -->
+    <div class="bg-black border-b border-gray-800 pt-4 mb-6">
+        <div class="container mx-auto mb-4 md:mb-6">
+            <header class="flex justify-between items-center px-2 md:px-0 gap-4">
+                <div class="flex items-center min-w-0 gap-3">
+                    <a href="/" class="flex items-center min-w-0 gap-3 text-gray-100">
+                        <!-- Tailscale-style logo dots -->
+                        <svg width="18" height="18" viewBox="0 0 23 23" fill="none" class="shrink-0">
+                            <circle opacity="0.2" cx="3.4" cy="3.25" r="2.7" fill="currentColor"></circle>
+                            <circle cx="3.4" cy="11.3" r="2.7" fill="currentColor"></circle>
+                            <circle opacity="0.2" cx="3.4" cy="19.5" r="2.7" fill="currentColor"></circle>
+                            <circle cx="11.5" cy="11.3" r="2.7" fill="currentColor"></circle>
+                            <circle cx="11.5" cy="19.5" r="2.7" fill="currentColor"></circle>
+                            <circle opacity="0.2" cx="11.5" cy="3.25" r="2.7" fill="currentColor"></circle>
+                            <circle opacity="0.2" cx="19.5" cy="3.25" r="2.7" fill="currentColor"></circle>
+                            <circle cx="19.5" cy="11.3" r="2.7" fill="currentColor"></circle>
+                            <circle opacity="0.2" cx="19.5" cy="19.5" r="2.7" fill="currentColor"></circle>
+                        </svg>
+                        <div class="text-lg font-semibold truncate">Headscale Admin</div>
+                    </a>
+                </div>
+                {{if .User}}
+                <!-- User Menu -->
+                <div class="flex items-center gap-3">
+                    <div class="hidden sm:flex flex-col items-end">
+                        <div class="text-sm font-medium text-gray-100">{{.User.Name}}</div>
+                        <div class="text-xs text-gray-400">{{if .User.Email}}{{.User.Email}}{{else}}User ID: {{.User.ID}}{{end}}</div>
+                    </div>
+                    <details class="relative group">
+                        <summary class="list-none cursor-pointer flex items-center justify-center w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                        </summary>
+                        <div class="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 z-50 hidden group-open:block">
+                            <!-- User info (mobile only) -->
+                            <div class="sm:hidden px-4 py-2 border-b border-gray-700">
+                                <div class="text-sm font-medium text-gray-100">{{.User.Name}}</div>
+                                <div class="text-xs text-gray-400">{{if .User.Email}}{{.User.Email}}{{else}}User ID: {{.User.ID}}{{end}}</div>
+                            </div>
+                            <!-- Auth method badge -->
+                            <div class="px-4 py-2">
+                                <div class="text-xs text-gray-500 mb-1">Authentication</div>
+                                <div class="inline-flex items-center px-2 py-1 rounded-sm text-xs bg-gray-700 text-gray-300">
+                                    {{if eq .User.Method "oidc"}}
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+                                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                        </svg>
+                                        SSO
+                                    {{else if eq .User.Method "whois"}}
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" x2="16" y1="12" y2="12"></line>
+                                            <line x1="12" x2="14" y1="16" y2="16"></line>
+                                        </svg>
+                                        Tailscale
+                                    {{end}}
+                                </div>
+                            </div>
+                            <!-- Logout -->
+                            {{if eq .User.Method "oidc"}}
+                            <div class="border-t border-gray-700">
+                                <form action="/auth/logout" method="post">
+                                    <button type="submit" class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors flex items-center gap-2">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                            <polyline points="16 17 21 12 16 7"></polyline>
+                                            <line x1="21" x2="9" y1="12" y2="12"></line>
+                                        </svg>
+                                        Sign out
+                                    </button>
+                                </form>
+                            </div>
+                            {{end}}
+                        </div>
+                    </details>
+                </div>
+                {{end}}
+            </header>
+        </div>
+        <!-- Horizontal Navigation -->
+        <div class="relative overflow-hidden">
+            <nav class="flex items-center overflow-auto left-1 relative md:container md:mx-auto md:px-0">
+                <a class="whitespace-nowrap py-2 group relative {{if eq .Active "machines"}}text-gray-100{{else}}text-gray-400 hover:text-gray-200{{end}}" href="/">
+                    <div class="px-3 py-2 flex items-center rounded-md hover:bg-gray-700 navigation-link {{if eq .Active "machines"}}navigation-link-active{{end}}">
+                        <svg class="w-4 h-4 mr-2 hidden sm:inline-block" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <rect width="20" height="8" x="2" y="2" rx="2" ry="2"></rect>
+                            <rect width="20" height="8" x="2" y="14" rx="2" ry="2"></rect>
+                            <line x1="6" x2="6.01" y1="6" y2="6"></line>
+                            <line x1="6" x2="6.01" y1="18" y2="18"></line>
+                        </svg>
+                        <div>Machines</div>
+                    </div>
+                </a>
+                <a class="whitespace-nowrap py-2 group relative {{if eq .Active "users"}}text-gray-100{{else}}text-gray-400 hover:text-gray-200{{end}}" href="/users">
+                    <div class="px-3 py-2 flex items-center rounded-md hover:bg-gray-700 navigation-link {{if eq .Active "users"}}navigation-link-active{{end}}">
+                        <svg class="w-4 h-4 mr-2 hidden sm:inline-block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <div>Users</div>
+                    </div>
+                </a>
+            </nav>
+        </div>
+    </div>
+{{end}}

@@ -1,0 +1,54 @@
+# Headscale configuration for integration tests
+# Minimal configuration optimized for testing
+
+server_url: http://headscale:8080
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 0.0.0.0:9090
+
+# gRPC settings - allow insecure for testing
+grpc_listen_addr: 0.0.0.0:50443
+grpc_allow_insecure: true
+
+# Noise protocol (required for Tailscale v2)
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+# IP prefixes for the tailnet
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+
+# Use ephemeral in-memory SQLite for fast tests
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+    write_ahead_log: false
+
+# Minimal logging for test speed
+log:
+  level: warn
+  format: text
+
+# Disable features not needed for testing
+disable_check_updates: true
+ephemeral_node_inactivity_timeout: 30m
+
+# DNS settings (can be tested)
+dns:
+  magic_dns: true
+  base_domain: headscale.test
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 8.8.8.8
+
+# DERP configuration - use Tailscale's public DERP for testing
+# This allows real latency measurements
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  auto_update_enabled: true
+  update_frequency: 24h

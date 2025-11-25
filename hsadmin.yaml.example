@@ -1,0 +1,88 @@
+# hsadmin configuration file example
+
+headscale:
+  # Agent user ID: The Headscale user ID that hsadmin will run as
+  # This should be a dedicated user ID for the hsadmin agent
+  agent_userid: 1
+
+  # Agent tags: Optional tags to assign to the hsadmin node
+  # agent_tags:
+  #   - "tag:hsadmin"
+
+  # API host and port: The Headscale gRPC API endpoint
+  # This is typically localhost:50443 or the Headscale API socket address
+  api_hostport: "localhost:50443"
+
+  # API key: The Headscale API key for authentication
+  # Generate this using: headscale apikeys create --expiration 90d
+  api_key: "your-headscale-api-key-here"
+
+  # Server URL: The Headscale control server URL
+  # This is the URL that Tailscale clients use to connect to Headscale
+  server_url: "https://headscale.example.com"
+
+# Listener configuration
+# Configure which listeners to enable and their authentication methods
+listeners:
+  # Tailscale network listener (tsnet)
+  # Provides access via the Tailscale network with WhoIs authentication
+  tailscale:
+    # Port: Optional - defaults to 80
+    # port: 80
+
+    # Admin user IDs: List of Headscale user IDs that are authorized admins
+    admin_user_ids:
+      - 1  # Replace with your admin user ID(s)
+
+    # Admin user tags: Optional - allow users with specific ACL tags
+    # admin_user_tags:
+    #   - "tag:admin"
+
+  # HTTP listener for external access
+  # Provides access via HTTP with OIDC authentication
+  # Uncomment this section to enable external access via OIDC
+  # http:
+  #   # Listen address: Port/address for the HTTP listener
+  #   # Default: ":8080" (all interfaces, port 8080)
+  #   # Examples:
+  #   #   - ":8080"          # All interfaces, port 8080
+  #   #   - "127.0.0.1:8080" # Localhost only (use with reverse proxy)
+  #   listen_addr: ":8080"
+  #
+  #   # OIDC authentication configuration
+  #   oidc:
+  #     # Provider URL: Your OIDC/OAuth2 provider's discovery URL
+  #     # Examples:
+  #     #   - Google: https://accounts.google.com
+  #     #   - Okta: https://your-domain.okta.com
+  #     #   - Keycloak: https://keycloak.example.com/realms/your-realm
+  #     provider_url: "https://accounts.google.com"
+  #
+  #     # Client ID: The client ID from your OIDC provider
+  #     client_id: "your-client-id.apps.googleusercontent.com"
+  #
+  #     # Client secret: The client secret from your OIDC provider
+  #     client_secret: "your-client-secret"
+  #
+  #     # Redirect URL: The callback URL where OIDC will redirect after auth
+  #     # This must match the redirect URI configured in your OIDC provider
+  #     redirect_url: "https://hsadmin.example.com/auth/callback"
+  #
+  #     # Admin emails: List of email addresses that are authorized admins
+  #     admin_emails:
+  #       - "admin@example.com"
+  #
+  #     # Session secret: A random secret for encrypting session cookies
+  #     # Generate using: openssl rand -base64 32
+  #     # Must be at least 32 characters
+  #     session_secret: "your-random-secret-here"
+  #
+  #     # Scopes: Optional - defaults to ["openid", "profile", "email"]
+  #     # scopes:
+  #     #   - "openid"
+  #     #   - "profile"
+  #     #   - "email"
+  #
+  #     # Session duration: Optional - defaults to 24h
+  #     # Examples: 1h, 24h, 7d
+  #     # session_duration: 24h

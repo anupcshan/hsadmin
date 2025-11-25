@@ -1,0 +1,5 @@
+hsadmin
+hsadmin.yaml
+
+# flake.nix build file
+result
