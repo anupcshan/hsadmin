@@ -1221,6 +1221,11 @@ func startTestServer(t *testing.T, testEnv *TestEnv) (*httptest.Server, string) 
 
 	// Setup routes
 	mux := http.NewServeMux()
+
+	// Serve static files from filesystem (matching main.go's /static/ route)
+	staticPath := filepath.Join(repoRoot, "web", "static")
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(staticPath))))
+
 	handlers.SetupRoutes(mux, machinesHandler, machineActionsHandler, usersHandler, sseHandler)
 
 	// Create test server

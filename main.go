@@ -5,6 +5,7 @@ import (
 	"embed"
 	"flag"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -25,6 +26,9 @@ import (
 
 //go:embed web/templates/*.html
 var templatesFS embed.FS
+
+//go:embed web/static/*
+var staticFS embed.FS
 
 type apiKeyAuth struct {
 	key string
@@ -136,6 +140,13 @@ func main() {
 
 	// Setup routes
 	mux := http.NewServeMux()
+
+	// Static file server (strip "web/" prefix from embedded filesystem)
+	staticContent, err := fs.Sub(staticFS, "web")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mux.Handle("/static/", http.FileServer(http.FS(staticContent)))
 
 	// Auth routes (public, no auth required)
 	if authHandlers != nil {
