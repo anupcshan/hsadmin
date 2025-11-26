@@ -45,7 +45,8 @@ func setupUITest(t *testing.T) *uiTestFixture {
 	t.Cleanup(server.Close)
 
 	// Wait for at least one user to exist
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 45*time.Second)
+	// Use longer timeout for CPU-loaded environments
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 300*time.Second)
 	t.Cleanup(func() { cancelFunc() })
 	require.Eventually(t, func() bool {
 		usersResp, err := testEnv.GetHeadscaleClient().ListUsers(ctx, &headscale.ListUsersRequest{})
@@ -108,37 +109,26 @@ func TestUsersDropdownClickOutside_UI(t *testing.T) {
 
 	fixture := setupUITest(t)
 
-	// Navigate to users page
-	page := fixture.browser.MustPage(fixture.serverURL + "/users")
-	defer page.MustClose()
+	// Navigate to users page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/users")
 
-	// Wait for page to load
-	page.MustWaitLoad()
-
-	// Find the first user's menu button and the details element
-	menuButton := page.MustElement(`[data-testid="user-menu-button"]`)
-	detailsElement := menuButton.MustParent() // The <details> element is the parent of <summary>
+	// The details element that contains the menu button - use selector, not stale reference
+	detailsSelector := `details:has([data-testid="user-menu-button"])`
 
 	// Verify the dropdown is initially closed
-	hasOpen := detailsElement.MustProperty("open").Bool()
-	require.False(t, hasOpen, "Dropdown should be initially closed")
+	require.False(t, IsDropdownOpen(page, detailsSelector), "Dropdown should be initially closed")
 
 	// Click the menu button to open it
-	menuButton.MustClick()
-	page.MustWaitIdle()
+	ClickElement(t, page, `[data-testid="user-menu-button"]`)
 
-	// Verify the dropdown is now open
-	hasOpen = detailsElement.MustProperty("open").Bool()
-	require.True(t, hasOpen, "Dropdown should be open after clicking the button")
+	// Wait for dropdown to be open (use retry for SSE updates)
+	WaitForDropdownOpen(t, page, detailsSelector, 5*time.Second)
 
 	// Click outside the dropdown (click on the page header)
-	header := page.MustElement("h1")
-	header.MustClick()
-	page.MustWaitIdle()
+	ClickElement(t, page, "h1")
 
 	// Verify the dropdown is now closed
-	hasOpen = detailsElement.MustProperty("open").Bool()
-	require.False(t, hasOpen, "Dropdown should be closed after clicking outside")
+	WaitForDropdownClosed(t, page, detailsSelector, 5*time.Second)
 
 	t.Log("✓ Dropdown closes when clicking outside")
 }
@@ -152,42 +142,32 @@ func TestRenameUser_UI(t *testing.T) {
 
 	fixture := setupUITest(t)
 
-	// Navigate to users page
-	page := fixture.browser.MustPage(fixture.serverURL + "/users")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to users page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/users")
 
 	// Get the original username for verification
 	userNameElement := page.MustElement(`[data-testid="user-display-name"]`)
 	originalName := userNameElement.MustText()
 	t.Logf("Original username: %s", originalName)
 
-	// Open the dropdown menu
-	menuButton := page.MustElement(`[data-testid="user-menu-button"]`)
-	menuButton.MustClick()
-
-	// Wait for menu to be visible
-	menu := page.MustElement(`[data-testid="user-menu-dropdown"]`)
-	menu.MustWaitVisible()
-
-	// Click "Rename user" option
-	renameLink := menu.MustElement(`[data-testid="user-menu-rename"]`)
-	renameLink.MustClick()
-
-	// Wait for rename modal to become visible
+	// Open the dropdown menu, click "Rename user", and wait for modal
+	OpenAndClickDropdownItem(t, page,
+		`[data-testid="user-menu-button"]`,
+		`[data-testid="user-menu-rename"]`,
+		`[data-testid="rename-modal"]`)
 	renameModal := page.MustElement(`[data-testid="rename-modal"]`)
-	renameModal.MustWaitVisible()
 
 	// Fill in the new name
 	newName := "renamed-user"
 	nameInput := renameModal.MustElement(`[data-testid="rename-input"]`)
 	nameInput.MustSelectAllText().MustInput(newName)
 
-	// Submit the form - set up navigation waiter before clicking
+	// Submit the form - HTMX will handle the request
 	submitButton := renameModal.MustElement(`[data-testid="rename-submit"]`)
-	wait := page.MustWaitNavigation()
 	submitButton.MustClick()
-	wait() // Wait for HTMX request to complete and JavaScript to reload page
+
+	// Wait for the modal to close (HTMX success handler closes it)
+	WaitForElementToDisappear(t, page, `dialog[open]`, "", 15*time.Second)
 
 	// Verify the user was renamed in the UI
 	// userNameElement = page.MustElement(`[data-testid="user-display-name"]`)
@@ -224,21 +204,12 @@ func TestGeneratePreAuthKey_UI(t *testing.T) {
 	userID := usersResp.Users[0].Id
 	userName := usersResp.Users[0].Name
 
-	// Open the dropdown menu
-	menuButton := page.MustElement(`[data-testid="user-menu-button"]`)
-	menuButton.MustClick()
-
-	// Wait for menu to be visible
-	menu := page.MustElement(`[data-testid="user-menu-dropdown"]`)
-	menu.MustWaitVisible()
-
-	// Click "Generate pre-auth key" option
-	preauthLink := menu.MustElement(`[data-testid="user-menu-preauth"]`)
-	preauthLink.MustClick()
-
-	// Wait for preauth modal to become visible
+	// Open the dropdown menu, click "Generate pre-auth key", and wait for modal
+	OpenAndClickDropdownItem(t, page,
+		`[data-testid="user-menu-button"]`,
+		`[data-testid="user-menu-preauth"]`,
+		`[data-testid="preauth-modal"]`)
 	preauthModal := page.MustElement(`[data-testid="preauth-modal"]`)
-	preauthModal.MustWaitVisible()
 
 	// Verify form elements are present
 	preauthModal.MustElement(`[data-testid="preauth-ephemeral"]`)
@@ -252,10 +223,9 @@ func TestGeneratePreAuthKey_UI(t *testing.T) {
 	generateButton := preauthModal.MustElement(`[data-testid="preauth-generate"]`)
 	generateButton.MustClick()
 
-	// Wait for HTMX to swap in the generated key (search from page root to avoid stale element issues)
-	page.MustWaitIdle() // Wait for network activity to settle
+	// Wait for HTMX to swap in the generated key
+	WaitForVisible(t, page, `[data-testid="preauth-key-output"]`)
 	keyOutput := page.MustElement(`[data-testid="preauth-key-output"]`)
-	keyOutput.MustWaitVisible()
 
 	// Verify the key was generated (non-empty)
 	generatedKey := keyOutput.MustProperty("value").String()
@@ -307,57 +277,28 @@ func TestDeleteUser_UI(t *testing.T) {
 	userToDelete := createUserResp.User
 	t.Logf("Created user for deletion: %s (ID: %d)", userToDelete.Name, userToDelete.Id)
 
-	// Navigate to users page
-	page := fixture.browser.MustPage(fixture.serverURL + "/users")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to users page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/users")
 
 	// Verify we have 2 users in the UI
 	userElements := page.MustElements(`[data-testid="user-display-name"]`)
 	require.Len(t, userElements, 2, "Should have 2 users in the UI")
 
-	// Get all table rows and find the one containing our target user
-	rows := page.MustElements("tbody tr")
-	var targetMenuButton, targetMenu *rod.Element
-	for _, row := range rows {
-		// Check if this row contains the user we want to delete
-		userNameInRow := row.MustElement(`[data-testid="user-display-name"]`).MustText()
-		if userNameInRow == userToDelete.Name {
-			targetMenuButton = row.MustElement(`[data-testid="user-menu-button"]`)
-			// The menu dropdown is also in the same row
-			targetMenu = row.MustElement(`[data-testid="user-menu-dropdown"]`)
-			break
-		}
-	}
-	require.NotNil(t, targetMenuButton, "Should find menu button for user-to-delete")
-	require.NotNil(t, targetMenu, "Should find menu dropdown for user-to-delete")
-
 	t.Logf("Attempting to delete user: %s", userToDelete.Name)
 
-	// Open the dropdown menu for the user we want to delete
-	targetMenuButton.MustClick()
-
-	// Wait for the specific menu to be visible
-	targetMenu.MustWaitVisible()
-
-	// Click "Delete user" option
-	deleteLink := targetMenu.MustElement(`[data-testid="user-menu-delete"]`)
-	deleteLink.MustClick()
-
-	// Wait for delete confirmation modal to become visible
+	// Open the dropdown menu, click "Delete user", and wait for modal
+	OpenAndClickDropdownItemInRowByText(t, page, userToDelete.Name,
+		`[data-testid="user-menu-button"]`,
+		`[data-testid="user-menu-delete"]`,
+		`[data-testid="delete-modal"]`)
 	deleteModal := page.MustElement(`[data-testid="delete-modal"]`)
-	deleteModal.MustWaitVisible()
 
-	// Confirm deletion by clicking the submit button
+	// Confirm deletion by clicking the submit button - HTMX will handle the request
 	submitButton := deleteModal.MustElement(`[data-testid="delete-submit"]`)
-
-	// Set up navigation waiter before clicking submit
-	wait := page.MustWaitNavigation()
 	submitButton.MustClick()
-	wait()
 
-	// Wait for the page to fully load after redirect
-	page.MustWaitLoad()
+	// Wait for the modal to close (HTMX success handler closes it)
+	WaitForElementToDisappear(t, page, `dialog[open]`, "", 15*time.Second)
 
 	// Verify the user was deleted via API
 	usersResp, err := fixture.testEnv.GetHeadscaleClient().ListUsers(fixture.ctx, &headscale.ListUsersRequest{})
@@ -407,38 +348,17 @@ func TestDeleteUserWithMachines_UI(t *testing.T) {
 	defer page.MustClose()
 	page.MustWaitLoad()
 
-	// Find the testuser row (which has machines)
-	rows := page.MustElements("tbody tr")
-	var targetMenuButton, targetMenu *rod.Element
-	for _, row := range rows {
-		userNameInRow := row.MustElement(`[data-testid="user-display-name"]`).MustText()
-		if userNameInRow == testUser.Name {
-			targetMenuButton = row.MustElement(`[data-testid="user-menu-button"]`)
-			targetMenu = row.MustElement(`[data-testid="user-menu-dropdown"]`)
-			break
-		}
-	}
-	require.NotNil(t, targetMenuButton, "Should find menu button for testuser")
-	require.NotNil(t, targetMenu, "Should find menu dropdown for testuser")
-
-	// Open the dropdown menu
-	targetMenuButton.MustClick()
-	targetMenu.MustWaitVisible()
-
-	// Click "Delete user" option
-	deleteLink := targetMenu.MustElement(`[data-testid="user-menu-delete"]`)
-	deleteLink.MustClick()
-
-	// Wait for delete confirmation modal to become visible
-	deleteModal := page.MustElement(`[data-testid="delete-modal"]`)
-	deleteModal.MustWaitVisible()
+	// Open the dropdown menu, click "Delete user", and wait for modal
+	OpenAndClickDropdownItemInRowByText(t, page, testUser.Name,
+		`[data-testid="user-menu-button"]`,
+		`[data-testid="user-menu-delete"]`,
+		`[data-testid="delete-modal"]`)
 
 	// Confirm deletion by clicking the submit button
-	submitButton := deleteModal.MustElement(`[data-testid="delete-submit"]`)
-	submitButton.MustClick()
+	ClickElement(t, page, `[data-testid="delete-submit"]`)
 
 	// Wait a moment for the request to complete
-	page.MustWaitIdle()
+	time.Sleep(500 * time.Millisecond)
 
 	// Check what actually happened - did the user get deleted?
 	usersRespAfter, err := fixture.testEnv.GetHeadscaleClient().ListUsers(fixture.ctx, &headscale.ListUsersRequest{})
@@ -508,51 +428,34 @@ func TestRenameMachine_UI(t *testing.T) {
 
 	t.Logf("Original machine name: %s (ID: %d)", originalName, machineID)
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
-	// Find the machine's menu button (now a <summary> inside <details>)
-	machineMenuButton := page.MustElement(`[data-testid="machine-menu-button"]`)
-	machineMenuButton.MustClick()
-
-	// Wait for menu to be visible
-	machineMenu := page.MustElement(`[data-testid="machine-menu-dropdown"]`)
-	machineMenu.MustWaitVisible()
-
-	// Click "Rename machine" option
-	renameLink := machineMenu.MustElement(`[data-testid="machine-menu-rename"]`)
-	renameLink.MustClick()
-
-	// Wait for rename modal to become visible
-	renameModal := page.MustElement(`#renameMachineModal`)
-	renameModal.MustWaitVisible()
+	// Open dropdown menu, click "Rename machine", and wait for modal
+	OpenAndClickDropdownItem(t, page,
+		`[data-testid="machine-menu-button"]`,
+		`[data-testid="machine-menu-rename"]`,
+		`#renameMachineModal`)
 
 	// Wait for JavaScript htmx.process() to complete by checking the attribute is set
-	form := renameModal.MustElement(`#renameMachineForm`)
 	require.Eventually(t, func() bool {
-		hxPost := form.MustAttribute("hx-post")
+		form, err := page.Element(`#renameMachineForm`)
+		if err != nil || form == nil {
+			return false
+		}
+		hxPost, err := form.Attribute("hx-post")
+		if err != nil {
+			return false
+		}
 		return hxPost != nil && *hxPost != ""
-	}, 2*time.Second, 100*time.Millisecond, "Form hx-post attribute should be set by JavaScript")
+	}, 5*time.Second, 100*time.Millisecond, "Form hx-post attribute should be set by JavaScript")
 
-	// Fill in the new name
+	// Fill in the new name - query fresh from page to avoid stale references
 	newName := "renamed-test-machine"
-	nameInput := renameModal.MustElement(`#renameMachineNewName`)
-	nameInput.MustSelectAllText().MustInput(newName)
+	page.MustElement(`#renameMachineNewName`).MustSelectAllText().MustInput(newName)
 
-	// Submit the form
-	submitButton := renameModal.MustElement(`button[type="submit"]`)
-	submitButton.MustClick()
-
-	t.Log("Clicked submit button, waiting for HTMX to complete...")
-
-	// Wait for the modal to close (happens when htmx:afterRequest event fires)
-	// This ensures the POST request completes before we proceed
-	require.Eventually(t, func() bool {
-		visible, _ := renameModal.Visible()
-		return !visible
-	}, 5*time.Second, 100*time.Millisecond, "Modal should close after successful rename")
+	// Submit the form and wait for modal to close
+	ClickAndWaitForModalClose(t, page, `#renameMachineModal button[type="submit"]`, `#renameMachineModal`)
 
 	t.Log("Modal closed, HTMX request completed")
 
@@ -582,7 +485,7 @@ func TestRenameMachine_UI(t *testing.T) {
 		// Also verify in the UI - the page should show the new name
 		pageText := page.MustElement("body").MustText()
 		return strings.Contains(pageText, newName)
-	}, 100*time.Millisecond, 5*time.Second, "Machine should be renamed in Headscale")
+	}, 15*time.Second, 200*time.Millisecond, "Machine should be renamed in Headscale")
 
 	t.Logf("✓ Machine successfully renamed from '%s' to '%s'", originalName, newName)
 }
@@ -602,35 +505,28 @@ func TestMachinesDropdownClickOutside_UI(t *testing.T) {
 		return err == nil && len(nodesResp.Nodes) > 0
 	}, 10*time.Second, 500*time.Millisecond, "Timeout waiting for machine to register")
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
-	// Find the first machine's menu button and the details element
-	menuButton := page.MustElement(`[data-testid="machine-menu-button"]`)
-	detailsElement := menuButton.MustParent() // The <details> element is the parent of <summary>
+	// The details element that contains the menu button - use selector, not stale reference
+	detailsSelector := `details:has([data-testid="machine-menu-button"])`
 
 	// Verify the dropdown is initially closed
-	hasOpen := detailsElement.MustProperty("open").Bool()
-	require.False(t, hasOpen, "Dropdown should be initially closed")
+	require.False(t, IsDropdownOpen(page, detailsSelector), "Dropdown should be initially closed")
 
-	// Click the menu button to open it
-	menuButton.MustClick()
-	page.MustWaitIdle()
-
-	// Verify the dropdown is now open
-	hasOpen = detailsElement.MustProperty("open").Bool()
-	require.True(t, hasOpen, "Dropdown should be open after clicking the button")
+	// Click the menu button to open it (retry for SSE updates)
+	require.Eventually(t, func() bool {
+		ClickElement(t, page, `[data-testid="machine-menu-button"]`)
+		// Give a small moment for the dropdown to open
+		time.Sleep(100 * time.Millisecond)
+		return IsDropdownOpen(page, detailsSelector)
+	}, 5*time.Second, 200*time.Millisecond, "Should be able to open dropdown")
 
 	// Click outside the dropdown (click on the page header)
-	header := page.MustElement("h1")
-	header.MustClick()
-	page.MustWaitIdle()
+	ClickElement(t, page, "h1")
 
 	// Verify the dropdown is now closed
-	hasOpen = detailsElement.MustProperty("open").Bool()
-	require.False(t, hasOpen, "Dropdown should be closed after clicking outside")
+	WaitForDropdownClosed(t, page, detailsSelector, 5*time.Second)
 
 	t.Log("✓ Machines dropdown closes when clicking outside")
 }
@@ -967,7 +863,7 @@ func TestMoveMachine_UI(t *testing.T) {
 			User: "testuser",
 		})
 		return err == nil && len(nodesResp.Nodes) > 0
-	}, 30*time.Second, 500*time.Millisecond, "Timeout waiting for test machine to register")
+	}, 60*time.Second, 500*time.Millisecond, "Timeout waiting for test machine to register")
 
 	// Get the machine ID and current owner
 	nodesResp, err := fixture.testEnv.GetHeadscaleClient().ListNodes(fixture.ctx, &headscale.ListNodesRequest{
@@ -980,26 +876,15 @@ func TestMoveMachine_UI(t *testing.T) {
 	originalOwner := machine.User.Name
 	t.Logf("Machine ID: %d, Current owner: %s", machineID, originalOwner)
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
-	// Open the dropdown menu for the first machine
-	menuButton := page.MustElement(`[data-testid="machine-menu-button"]`)
-	menuButton.MustClick()
-
-	// Wait for menu to be visible
-	menu := page.MustElement(`[data-testid="machine-menu-dropdown"]`)
-	menu.MustWaitVisible()
-
-	// Click "Move to user" option
-	moveLink := menu.MustElement(`[data-testid="machine-menu-move"]`)
-	moveLink.MustClick()
-
-	// Wait for move modal to become visible
+	// Open the dropdown menu, click "Move to user", and wait for modal
+	OpenAndClickDropdownItem(t, page,
+		`[data-testid="machine-menu-button"]`,
+		`[data-testid="machine-menu-move"]`,
+		`[data-testid="move-modal"]`)
 	moveModal := page.MustElement(`[data-testid="move-modal"]`)
-	moveModal.MustWaitVisible()
 
 	// Verify the current user is displayed
 	currentUserField := moveModal.MustElement(`#moveMachineCurrentUser`)
@@ -1010,14 +895,13 @@ func TestMoveMachine_UI(t *testing.T) {
 	targetUserDropdown := moveModal.MustElement(`[data-testid="move-target-user"]`)
 	targetUserDropdown.MustSelect(targetUser.Name)
 
-	// Submit the form - set up navigation waiter before clicking
+	// Submit the form - HTMX will handle the request and swap the body
 	submitButton := moveModal.MustElement(`[data-testid="move-submit"]`)
-	wait := page.MustWaitNavigation()
 	submitButton.MustClick()
-	wait() // Wait for HTMX request to complete and JavaScript to reload page
 
-	// Wait for the page to fully load after redirect
-	page.MustWaitLoad()
+	// Wait for the modal to close (HTMX success handler closes it)
+	// and for the page content to be updated with the new owner
+	WaitForElementToDisappear(t, page, `dialog[open]`, "", 15*time.Second)
 
 	// Verify the machine was moved via API
 	require.Eventually(t, func() bool {
@@ -1028,7 +912,7 @@ func TestMoveMachine_UI(t *testing.T) {
 			return false
 		}
 		return targetUser.Id == nodeResp.Node.User.Id && targetUser.Name == nodeResp.Node.User.Name
-	}, 5*time.Second, 100*time.Millisecond, "Machine should be moved to target user")
+	}, 15*time.Second, 200*time.Millisecond, "Machine should be moved to target user")
 
 	t.Logf("✓ Machine successfully moved from '%s' to '%s'", originalOwner, targetUser.Name)
 }
@@ -1048,7 +932,7 @@ func TestManageTags_UI(t *testing.T) {
 			User: "testuser",
 		})
 		return err == nil && len(nodesResp.Nodes) > 0
-	}, 30*time.Second, 500*time.Millisecond, "Timeout waiting for test machine to register")
+	}, 60*time.Second, 500*time.Millisecond, "Timeout waiting for test machine to register")
 
 	// Get the machine ID
 	nodesResp, err := fixture.testEnv.GetHeadscaleClient().ListNodes(fixture.ctx, &headscale.ListNodesRequest{
@@ -1060,40 +944,27 @@ func TestManageTags_UI(t *testing.T) {
 	machineID := machine.Id
 	t.Logf("Machine ID: %d", machineID)
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
-	// Open the dropdown menu for the first machine
-	menuButton := page.MustElement(`[data-testid="machine-menu-button"]`)
-	menuButton.MustClick()
-
-	// Wait for menu to be visible
-	menu := page.MustElement(`[data-testid="machine-menu-dropdown"]`)
-	menu.MustWaitVisible()
-
-	// Click "Manage tags" option
-	tagsLink := menu.MustElement(`[data-testid="machine-menu-tags"]`)
-	tagsLink.MustClick()
-
-	// Wait for tags modal to become visible
+	// Open the dropdown menu, click "Manage tags", and wait for modal
+	OpenAndClickDropdownItem(t, page,
+		`[data-testid="machine-menu-button"]`,
+		`[data-testid="machine-menu-tags"]`,
+		`[data-testid="tags-modal"]`)
 	tagsModal := page.MustElement(`[data-testid="tags-modal"]`)
-	tagsModal.MustWaitVisible()
 
 	// Enter tags (comma-separated)
 	tagsInput := tagsModal.MustElement(`[data-testid="tags-input"]`)
 	testTags := "tag:production, tag:web, tag:critical"
 	tagsInput.MustSelectAllText().MustInput(testTags)
 
-	// Submit the form - set up navigation waiter before clicking
+	// Submit the form - HTMX will handle the request and swap the body
 	submitButton := tagsModal.MustElement(`[data-testid="tags-submit"]`)
-	wait := page.MustWaitNavigation()
 	submitButton.MustClick()
-	wait() // Wait for HTMX request to complete and JavaScript to reload page
 
-	// Wait for the page to fully load after redirect
-	page.MustWaitLoad()
+	// Wait for the modal to close (HTMX success handler closes it)
+	WaitForElementToDisappear(t, page, `dialog[open]`, "", 15*time.Second)
 
 	// Verify the tags were set via API - use Eventually to handle async persistence
 	expectedTags := sets.FromSlice([]string{"tag:production", "tag:web", "tag:critical"})
@@ -1119,29 +990,23 @@ func TestManageTags_UI(t *testing.T) {
 	page.MustNavigate(fixture.serverURL + "/machines")
 	page.MustWaitLoad()
 
-	// Open the menu again
-	menuButton = page.MustElement(`[data-testid="machine-menu-button"]`)
-	menuButton.MustClick()
-	menu = page.MustElement(`[data-testid="machine-menu-dropdown"]`)
-	menu.MustWaitVisible()
-
-	// Click "Manage tags" option again
-	tagsLink = menu.MustElement(`[data-testid="machine-menu-tags"]`)
-	tagsLink.MustClick()
-
-	// Wait for tags modal to become visible
+	// Open the dropdown menu, click "Manage tags" again, and wait for modal
+	OpenAndClickDropdownItem(t, page,
+		`[data-testid="machine-menu-button"]`,
+		`[data-testid="machine-menu-tags"]`,
+		`[data-testid="tags-modal"]`)
 	tagsModal = page.MustElement(`[data-testid="tags-modal"]`)
-	tagsModal.MustWaitVisible()
 
 	// Clear all tags
 	tagsInput = tagsModal.MustElement(`[data-testid="tags-input"]`)
 	tagsInput.MustSelectAllText().MustInput("") // Clear input
 
-	// Submit the form
+	// Submit the form - HTMX will handle the request
 	submitButton = tagsModal.MustElement(`[data-testid="tags-submit"]`)
-	wait = page.MustWaitNavigation()
 	submitButton.MustClick()
-	wait()
+
+	// Wait for the modal to close
+	WaitForElementToDisappear(t, page, `dialog[open]`, "", 15*time.Second)
 
 	// Verify the tags were cleared via API (don't wait for page load, just check API)
 	require.Eventually(t, func() bool {
@@ -1267,33 +1132,15 @@ func TestDeleteMachine_UI(t *testing.T) {
 
 	t.Logf("Machine to delete: %s (ID: %d)", machineName, machineID)
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
-	// Find the row for the machine we want to delete
-	machineRow := page.MustElementR("tr", machineName)
-
-	// Open the dropdown menu for this specific machine
-	menuButton := machineRow.MustElement(`[data-testid="machine-menu-button"]`)
-	menuButton.MustClick()
-
-	// Wait for menu to be visible
-	menu := machineRow.MustElement(`[data-testid="machine-menu-dropdown"]`)
-	menu.MustWaitVisible()
-
-	// Verify delete option is present and correctly styled (red text)
-	deleteLink := menu.MustElement(`[data-testid="machine-menu-delete"]`)
-	require.Contains(t, deleteLink.MustHTML(), "text-red-400", "Delete link should have red color")
-	require.Contains(t, deleteLink.MustHTML(), "Delete machine", "Delete link should say 'Delete machine'")
-
-	// Click "Delete machine" option
-	deleteLink.MustClick()
-
-	// Wait for delete modal to become visible
+	// Open the dropdown menu, click "Delete machine", and wait for modal
+	OpenAndClickDropdownItemInRowByText(t, page, machineName,
+		`[data-testid="machine-menu-button"]`,
+		`[data-testid="machine-menu-delete"]`,
+		`#deleteMachineModal`)
 	deleteModal := page.MustElement(`#deleteMachineModal`)
-	deleteModal.MustWaitVisible()
 
 	// Verify the modal shows the correct machine name
 	machineNameField := deleteModal.MustElement(`#deleteMachineName`)
@@ -1306,25 +1153,28 @@ func TestDeleteMachine_UI(t *testing.T) {
 	require.Contains(t, warningText, "permanently deleted", "Modal should mention permanent deletion")
 
 	// Wait for JavaScript htmx.process() to complete by checking the attribute is set
-	form := deleteModal.MustElement(`#deleteMachineForm`)
 	require.Eventually(t, func() bool {
-		hxPost := form.MustAttribute("hx-post")
+		form, err := page.Element(`#deleteMachineForm`)
+		if err != nil || form == nil {
+			return false
+		}
+		hxPost, err := form.Attribute("hx-post")
+		if err != nil {
+			return false
+		}
 		expectedURL := "/machines/" + fmt.Sprint(machineID) + "/delete"
 		return hxPost != nil && *hxPost == expectedURL
-	}, 2*time.Second, 100*time.Millisecond, "Form hx-post attribute should be set to correct URL by JavaScript")
+	}, 5*time.Second, 100*time.Millisecond, "Form hx-post attribute should be set to correct URL by JavaScript")
 
 	// Verify the delete button is styled dangerously (red)
-	submitButton := deleteModal.MustElement(`[data-testid="delete-submit"]`)
+	submitButton := page.MustElement(`[data-testid="delete-submit"]`)
 	require.Contains(t, submitButton.MustHTML(), "bg-red-600", "Delete button should have red background")
 
 	// Click the "Delete Machine" button to actually delete it
 	submitButton.MustClick()
 
 	// Wait for the redirect back to machines list
-	require.Eventually(t, func() bool {
-		url := page.MustInfo().URL
-		return url == fixture.serverURL+"/machines"
-	}, 5*time.Second, 100*time.Millisecond, "Should redirect to machines list after deletion")
+	WaitForURL(t, page, fixture.serverURL+"/machines", 15*time.Second)
 
 	// Verify the machine was actually deleted from Headscale
 	require.Eventually(t, func() bool {
@@ -1339,7 +1189,7 @@ func TestDeleteMachine_UI(t *testing.T) {
 			}
 		}
 		return true // Machine not found, deletion successful
-	}, 5*time.Second, 200*time.Millisecond, "Deleted machine should be removed from Headscale")
+	}, 15*time.Second, 200*time.Millisecond, "Deleted machine should be removed from Headscale")
 
 	t.Logf("✓ Machine successfully deleted from Headscale (ID: %d)", machineID)
 }

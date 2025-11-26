@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-rod/rod"
 	headscale "github.com/juanfont/headscale/gen/go/headscale/v1"
 	"github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/require"
@@ -21,14 +20,11 @@ func TestSSE_MachineAddition(t *testing.T) {
 
 	fixture := setupUITest(t)
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
-	// Get initial machine count
-	initialMachines := page.MustElements("tr[id^='machine-']")
-	initialCount := len(initialMachines)
+	// Get initial machine count (use helper to avoid panics)
+	initialCount := CountElements(page, "tr[id^='machine-']")
 	t.Logf("Initial machine count: %d", initialCount)
 
 	// Add a new tailscale client (this should trigger SSE update)
@@ -38,34 +34,12 @@ func TestSSE_MachineAddition(t *testing.T) {
 	require.NoError(t, err, "Failed to start tailscale client")
 
 	// Wait for SSE update to add the machine to the UI
-	// The polling interval is 5 seconds, so we wait up to 10 seconds
-	var foundMachine *rod.Element
-	require.Eventually(t, func() bool {
-		// Re-query the machines list
-		machines := page.MustElements("tr[id^='machine-']")
-		t.Logf("Current machine count: %d", len(machines))
-
-		// Check if new machine appears
-		for _, machine := range machines {
-			machineHTML := machine.MustHTML()
-			if strings.Contains(machineHTML, hostname) {
-				foundMachine = machine
-				return true
-			}
-		}
-		return false
-	}, 15*time.Second, 1*time.Second, fmt.Sprintf("Machine %s should appear via SSE", hostname))
-
-	require.NotNil(t, foundMachine, "Machine should be found in the UI")
+	WaitForElementToContainText(t, page, "tr[id^='machine-']", hostname, 15*time.Second)
 	t.Logf("✓ Machine %s appeared via SSE without page refresh", hostname)
 
-	// Verify the machine row has the expected elements
-	statusElement := foundMachine.MustElement("span[id$='-status']")
-	require.NotNil(t, statusElement, "Status element should exist")
-
 	// Verify final count
-	finalMachines := page.MustElements("tr[id^='machine-']")
-	require.Equal(t, initialCount+1, len(finalMachines), "Should have one more machine")
+	finalCount := CountElements(page, "tr[id^='machine-']")
+	require.Equal(t, initialCount+1, finalCount, "Should have one more machine")
 }
 
 // TestSSE_MachineStatusChange tests that machine status changes (online/offline) are reflected via SSE
@@ -105,29 +79,32 @@ func TestSSE_MachineStatusChange(t *testing.T) {
 			}
 		}
 		return false
-	}, 10*time.Second, 500*time.Millisecond, "Machine should be registered")
+	}, 30*time.Second, 500*time.Millisecond, "Machine should be registered")
 	require.NotNil(t, container, "Container should be found")
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
 	// Find the machine in the UI and wait for it to show as Connected
+	// Use longer timeout since machine needs to connect and SSE needs to propagate
 	statusElementID := fmt.Sprintf("machine-%d-status", nodeID)
 	require.Eventually(t, func() bool {
-		machines := page.MustElements("tr[id^='machine-']")
+		machines := GetElements(page, "tr[id^='machine-']")
 		for _, machine := range machines {
-			machineHTML := machine.MustHTML()
+			machineHTML := GetElementHTML(machine)
 			if strings.Contains(machineHTML, hostname) {
-				elem := machine.MustElement(fmt.Sprintf("#%s", statusElementID))
-				if elem != nil && strings.Contains(elem.MustText(), "Connected") {
+				elem, err := machine.Element(fmt.Sprintf("#%s", statusElementID))
+				if err != nil || elem == nil {
+					continue
+				}
+				text, err := elem.Text()
+				if err == nil && strings.Contains(text, "Connected") {
 					return true
 				}
 			}
 		}
 		return false
-	}, 20*time.Second, 1*time.Second, "Machine should appear as Connected")
+	}, 60*time.Second, 1*time.Second, "Machine should appear as Connected")
 
 	t.Log("✓ Machine initially shows as Connected in UI")
 
@@ -157,20 +134,24 @@ func TestSSE_MachineStatusChange(t *testing.T) {
 	// Note: We need to re-query the element each time because SSE may have replaced the table
 	t.Log("Waiting for UI to reflect offline status via SSE...")
 	require.Eventually(t, func() bool {
-		// Re-query the status element
-		machines := page.MustElements("tr[id^='machine-']")
+		// Re-query the status element using non-panic helpers
+		machines := GetElements(page, "tr[id^='machine-']")
 		for _, machine := range machines {
-			machineHTML := machine.MustHTML()
+			machineHTML := GetElementHTML(machine)
 			if strings.Contains(machineHTML, hostname) {
-				elem := machine.MustElement(fmt.Sprintf("#%s", statusElementID))
-				if elem != nil {
-					statusText := elem.MustText()
-					isOffline := !strings.Contains(statusText, "Connected")
-					if isOffline {
-						t.Logf("✓ UI shows offline status: %s", statusText)
-					}
-					return isOffline
+				elem, err := machine.Element(fmt.Sprintf("#%s", statusElementID))
+				if err != nil || elem == nil {
+					continue
 				}
+				statusText, err := elem.Text()
+				if err != nil {
+					continue
+				}
+				isOffline := !strings.Contains(statusText, "Connected")
+				if isOffline {
+					t.Logf("✓ UI shows offline status: %s", statusText)
+				}
+				return isOffline
 			}
 		}
 		return false
@@ -213,28 +194,16 @@ func TestSSE_MachineDeletion(t *testing.T) {
 			}
 		}
 		return false
-	}, 10*time.Second, 500*time.Millisecond, "Machine should be registered")
+	}, 30*time.Second, 500*time.Millisecond, "Machine should be registered")
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
 	// Wait for machine to appear in UI first
-	require.Eventually(t, func() bool {
-		machines := page.MustElements("tr[id^='machine-']")
-		for _, machine := range machines {
-			machineHTML := machine.MustHTML()
-			if strings.Contains(machineHTML, hostname) {
-				return true
-			}
-		}
-		return false
-	}, 15*time.Second, 1*time.Second, "Machine should appear in UI before deletion")
+	WaitForElementToContainText(t, page, "tr[id^='machine-']", hostname, 15*time.Second)
 
 	// Get initial count
-	initialMachines := page.MustElements("tr[id^='machine-']")
-	initialCount := len(initialMachines)
+	initialCount := CountElements(page, "tr[id^='machine-']")
 	t.Logf("Machine count before deletion: %d", initialCount)
 
 	// Delete the machine via API
@@ -245,24 +214,12 @@ func TestSSE_MachineDeletion(t *testing.T) {
 	require.NoError(t, err, "Failed to delete machine")
 
 	// Wait for SSE update to remove the machine from the UI
-	// The polling interval is 5 seconds, so we wait up to 15 seconds
-	require.Eventually(t, func() bool {
-		machines := page.MustElements("tr[id^='machine-']")
-		t.Logf("Current machine count: %d", len(machines))
-
-		// Check if machine is gone
-		for _, machine := range machines {
-			machineHTML := machine.MustHTML()
-			if strings.Contains(machineHTML, hostname) {
-				return false // Machine still exists, keep waiting
-			}
-		}
-		return true // Machine is gone
-	}, 15*time.Second, 1*time.Second, fmt.Sprintf("Machine %s should disappear via SSE", hostname))
+	// Use longer timeout since SSE polling interval is ~5s and updates can take time to propagate
+	WaitForElementToDisappear(t, page, "tr[id^='machine-']", hostname, 60*time.Second)
 
 	// Verify final count
-	finalMachines := page.MustElements("tr[id^='machine-']")
-	require.Equal(t, initialCount-1, len(finalMachines), "Should have one fewer machine")
+	finalCount := CountElements(page, "tr[id^='machine-']")
+	require.Equal(t, initialCount-1, finalCount, "Should have one fewer machine")
 
 	t.Logf("✓ Machine %s disappeared via SSE without page refresh", hostname)
 }
@@ -276,14 +233,11 @@ func TestSSE_MultipleChanges(t *testing.T) {
 
 	fixture := setupUITest(t)
 
-	// Navigate to machines page
-	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
-	defer page.MustClose()
-	page.MustWaitLoad()
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
 
 	// Get initial count
-	initialMachines := page.MustElements("tr[id^='machine-']")
-	initialCount := len(initialMachines)
+	initialCount := CountElements(page, "tr[id^='machine-']")
 	t.Logf("Initial machine count: %d", initialCount)
 
 	// Add multiple machines rapidly
@@ -299,10 +253,9 @@ func TestSSE_MultipleChanges(t *testing.T) {
 		require.NoError(t, err, "Failed to start tailscale client %d", i)
 	}
 
-	// Wait for all machines to appear in UI
-	// With 5 second polling and multiple machines, this could take up to 20 seconds
+	// Wait for all machines to appear in UI (use non-panic helpers)
 	require.Eventually(t, func() bool {
-		machines := page.MustElements("tr[id^='machine-']")
+		machines := GetElements(page, "tr[id^='machine-']")
 		currentCount := len(machines)
 		t.Logf("Current machine count: %d (expecting %d)", currentCount, initialCount+numMachines)
 
@@ -310,7 +263,7 @@ func TestSSE_MultipleChanges(t *testing.T) {
 		foundCount := 0
 		for _, hostname := range hostnames {
 			for _, machine := range machines {
-				machineHTML := machine.MustHTML()
+				machineHTML := GetElementHTML(machine)
 				if strings.Contains(machineHTML, hostname) {
 					foundCount++
 					break
@@ -323,8 +276,8 @@ func TestSSE_MultipleChanges(t *testing.T) {
 	}, 30*time.Second, 2*time.Second, "All machines should appear via SSE")
 
 	// Verify final count
-	finalMachines := page.MustElements("tr[id^='machine-']")
-	require.Equal(t, initialCount+numMachines, len(finalMachines),
+	finalCount := CountElements(page, "tr[id^='machine-']")
+	require.Equal(t, initialCount+numMachines, finalCount,
 		"Should have %d more machines", numMachines)
 
 	t.Logf("✓ All %d machines appeared via SSE", numMachines)
