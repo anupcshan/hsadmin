@@ -18,7 +18,46 @@ const (
 	DefaultWaitTimeout     = 15 * time.Second
 	DefaultPollInterval    = 100 * time.Millisecond
 	DefaultSSEPollInterval = 1 * time.Second
+
+	// QuickElementTimeout is used by QuickElement to fail fast.
+	// See QuickElement documentation for details.
+	QuickElementTimeout = 500 * time.Millisecond
 )
+
+// QuickElement finds an element with a short timeout, designed for use in retry loops.
+//
+// rod's page.Element() internally waits and retries until it finds a matching element,
+// using the page's default timeout (often 30+ seconds). This is problematic when used
+// inside a require.Eventually() retry loop:
+//
+//	require.Eventually(t, func() bool {
+//	    btn, _ := page.Element(selector)  // Blocks for 30s if not found!
+//	    btn.Click()
+//	    return checkSuccess()
+//	}, 15*time.Second, 50*time.Millisecond)  // Only 1 attempt possible
+//
+// With a 30-second internal timeout, a single failed Element() call consumes the entire
+// 15-second Eventually budget, allowing only one attempt instead of many.
+//
+// QuickElement solves this by using a short 500ms timeout:
+//
+//	require.Eventually(t, func() bool {
+//	    btn, _ := QuickElement(page, selector)  // Fails fast after 500ms
+//	    btn.Click()
+//	    return checkSuccess()
+//	}, 15*time.Second, 50*time.Millisecond)  // ~30 attempts possible
+//
+// Use QuickElement inside retry loops. Use page.Element() or page.MustElement()
+// for one-shot operations where blocking is acceptable.
+func QuickElement(page *rod.Page, selector string) (*rod.Element, error) {
+	return page.Timeout(QuickElementTimeout).Element(selector)
+}
+
+// QuickElementR is like QuickElement but matches by regex on element text.
+// See QuickElement for why this exists.
+func QuickElementR(page *rod.Page, selector, regex string) (*rod.Element, error) {
+	return page.Timeout(QuickElementTimeout).ElementR(selector, regex)
+}
 
 // ClickElement clicks an element by selector, retrying if SSE updates cause stale references.
 // This is the primary way to click elements in tests that have SSE updates.
@@ -179,30 +218,36 @@ func OpenAndClickDropdownItem(t *testing.T, page *rod.Page, menuButtonSelector, 
 	attempts := 0
 	require.Eventually(t, func() bool {
 		attempts++
+		t.Logf("Attempt %d: starting", attempts)
+
 		// Click to open dropdown
-		btn, err := page.Element(menuButtonSelector)
+		btn, err := QuickElement(page, menuButtonSelector)
 		if err != nil || btn == nil {
 			t.Logf("Attempt %d: button not found", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: found button, clicking", attempts)
 		if btn.Click("left", 1) != nil {
 			t.Logf("Attempt %d: button click failed", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: button clicked", attempts)
 
 		// Click the item in the open dropdown
-		item, err := page.Element("details[open] " + itemSelector)
+		item, err := QuickElement(page, "details[open] "+itemSelector)
 		if err != nil || item == nil {
 			t.Logf("Attempt %d: item not found in open dropdown", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: found item, clicking", attempts)
 		if item.Click("left", 1) != nil {
 			t.Logf("Attempt %d: item click failed", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: item clicked", attempts)
 
 		// Verify expected element appeared
-		expected, err := page.Element(expectedSelector)
+		expected, err := QuickElement(page, expectedSelector)
 		if err != nil || expected == nil {
 			t.Logf("Attempt %d: expected element not found: %s", attempts, expectedSelector)
 			return false
@@ -226,36 +271,46 @@ func OpenAndClickDropdownItemInRowByText(t *testing.T, page *rod.Page, rowText, 
 	attempts := 0
 	require.Eventually(t, func() bool {
 		attempts++
+		t.Logf("Attempt %d: starting", attempts)
+
 		// Find the row containing the text
-		row, err := page.ElementR("tr", rowText)
+		row, err := QuickElementR(page, "tr", rowText)
 		if err != nil || row == nil {
 			t.Logf("Attempt %d: row not found for text '%s'", attempts, rowText)
 			return false
 		}
+		t.Logf("Attempt %d: found row", attempts)
+
 		// Click the menu button in this row
 		btn, err := row.Element(menuButtonSelector)
 		if err != nil || btn == nil {
 			t.Logf("Attempt %d: button not found in row", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: found button, clicking", attempts)
+
 		if btn.Click("left", 1) != nil {
 			t.Logf("Attempt %d: button click failed", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: button clicked", attempts)
 
 		// Click the item in the open dropdown
-		item, err := page.Element("details[open] " + itemSelector)
+		item, err := QuickElement(page, "details[open] "+itemSelector)
 		if err != nil || item == nil {
 			t.Logf("Attempt %d: item not found in open dropdown", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: found item, clicking", attempts)
+
 		if item.Click("left", 1) != nil {
 			t.Logf("Attempt %d: item click failed", attempts)
 			return false
 		}
+		t.Logf("Attempt %d: item clicked", attempts)
 
 		// Verify expected element appeared
-		expected, err := page.Element(expectedSelector)
+		expected, err := QuickElement(page, expectedSelector)
 		if err != nil || expected == nil {
 			t.Logf("Attempt %d: expected element not found: %s", attempts, expectedSelector)
 			return false
