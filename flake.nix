@@ -161,7 +161,7 @@
             echo "  go test -short ./...                   # Run unit tests"
             echo "  go test ./test/integration             # Run integration tests (requires Docker)"
             echo "  go build -o hsadmin main.go            # Build binary"
-            echo "  golangci-lint run --disable errcheck   # Run linter"
+            echo "  golangci-lint run                      # Run linter"
             echo ""
             echo "Note: Integration tests require Docker daemon to be running"
           '';

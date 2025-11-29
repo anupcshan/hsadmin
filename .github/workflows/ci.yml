@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Check formatting
+        run: |
+          go fmt ./...
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "Code is not formatted. Run 'go fmt ./...'"
+            git diff
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        run: go tool golangci-lint run
+
+      - name: Run unit tests
+        run: go test -race -short ./...
+
+      - name: Build
+        run: go build -o hsadmin main.go
+
+      - name: Run integration tests
+        run: go test -race -parallel 1 ./test/integration
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-screenshots
+          path: test/integration/.testoutput/screenshots/
+          retention-days: 7
