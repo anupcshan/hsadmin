@@ -411,6 +411,35 @@ func (h *MachineActionsHandler) DeleteNode(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/machines", http.StatusSeeOther)
 }
 
+// ExpireNode handles POST /machines/{id}/expire - expires a machine's key
+func (h *MachineActionsHandler) ExpireNode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Extract machine ID from URL path
+	machineID, err := extractMachineID(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid machine ID: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Expire node via Headscale API
+	_, err = h.headscaleClient.ExpireNode(ctx, &headscale.ExpireNodeRequest{
+		NodeId: machineID,
+	})
+	if err != nil {
+		http.Error(w, "Failed to expire node: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect back to machines list
+	http.Redirect(w, r, "/machines", http.StatusSeeOther)
+}
+
 // Helper function to extract machine ID from URL path
 func extractMachineID(path string) (uint64, error) {
 	// Path format: /machines/{id}/routes/exit-node/approve or reject
@@ -418,6 +447,7 @@ func extractMachineID(path string) (uint64, error) {
 	// or /machines/{id}/move
 	// or /machines/{id}/tags
 	// or /machines/{id}/delete
+	// or /machines/{id}/expire
 	parts := strings.Split(strings.TrimPrefix(path, "/machines/"), "/")
 	if len(parts) < 1 {
 		return 0, http.ErrNotSupported

@@ -5,7 +5,7 @@ Build a full-featured web admin interface for Headscale (self-hosted Tailscale c
 
 ## Progress Summary
 
-**Overall Completion:** ~80% complete (8/11 phases complete, 1 in progress)
+**Overall Completion:** ~87% complete (9/11 phases complete, 1 partial, 1 not started)
 
 | Phase | Status | Completion |
 |-------|--------|------------|
@@ -21,7 +21,7 @@ Build a full-featured web admin interface for Headscale (self-hosted Tailscale c
 | Phase 10: Polish & Production | 🔄 Partial | 30% |
 | Phase 11: Authentication & Authorization | ✅ Complete | 100% |
 
-**The application now includes comprehensive authentication and is production-ready for multi-user deployments when auth is enabled.**
+**The application is production-ready** with comprehensive authentication, real-time updates, and full machine/user management. Missing: ACL editor.
 
 ## Code Quality & Technical Debt
 
@@ -151,9 +151,10 @@ The application is **production-ready** for Headscale management:
 - **Route management** - approve/reject exit node capability and subnet routes
   - Individual subnet route approval/rejection with per-route buttons
   - Exit node approval/rejection with visual status indicators
-- **Machine actions** - move nodes to different users, manage tags, delete machines
+- **Machine actions** - move nodes to different users, manage tags, expire keys, delete machines
   - Move node to different user with dropdown selector
   - Set/edit/clear tags with comma-separated input
+  - Expire machine keys (forces re-authentication)
   - Delete machines with confirmation modal and permanent deletion warning
 - **Dark UI** matching Tailscale's design with responsive layout
 - **Comprehensive testing** with golden file tests and browser automation (including SSE, route management and machine actions)
@@ -161,9 +162,8 @@ The application is **production-ready** for Headscale management:
 ### What's Next 📋
 
 **Priority features for full feature parity:**
-1. **Complete Machine Actions** - Expire nodes (Phase 6 - Delete implemented)
-2. **ACL Editor** - Web-based policy editor with syntax highlighting (Phase 7)
-3. **Polish** - Loading states, error handling improvements (Phase 10)
+1. **ACL Editor** - Web-based policy editor with syntax highlighting (Phase 7 - not started)
+2. **Polish & Production** - Loading states, Dockerfile, documentation (Phase 10 - partial)
 
 **Config file structure** (`hsadmin.yaml`):
 ```yaml
@@ -297,7 +297,7 @@ When clicking a machine, show detailed view similar to Tailscale's:
   - ✅ Move node to different user (MoveNode)
   - ✅ Set/edit tags (SetTags)
   - ✅ Delete node (DeleteNode) with confirmation modal
-  - Expire node key (ExpireNode) - TODO
+  - ✅ Expire node key (ExpireNode) with confirmation modal
 - **Action buttons**:
   - Dropdown menu on machine list rows
   - Direct action buttons on machine detail page for routes
@@ -501,7 +501,10 @@ Replicate Tailscale's ACL editor:
 - [x] Add delete button to machine dropdown menu (red styled for danger)
 - [x] Add confirmation modal with warning for delete action
 - [x] Browser automation test verifying end-to-end deletion from Headscale
-- [ ] Implement POST /machines/:id/expire (ExpireNode) - TODO
+- [x] Implement POST /machines/:id/expire (ExpireNode)
+- [x] Add expire button to machine dropdown menu (yellow styled for warning)
+- [x] Add confirmation modal with re-authentication warning for expire action
+- [x] Browser automation test verifying end-to-end key expiration
 - [x] Update machine detail view after actions - handled by SSE
 
 ### Phase 7: ACL Editor Page

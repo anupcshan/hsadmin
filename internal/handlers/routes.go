@@ -26,6 +26,8 @@ func SetupRoutes(
 			machineActionsHandler.SetTags(w, r)
 		} else if strings.HasSuffix(path, "/delete") {
 			machineActionsHandler.DeleteNode(w, r)
+		} else if strings.HasSuffix(path, "/expire") {
+			machineActionsHandler.ExpireNode(w, r)
 		} else if strings.HasSuffix(path, "/routes/exit-node/approve") {
 			machineActionsHandler.ApproveExitNode(w, r)
 		} else if strings.HasSuffix(path, "/routes/exit-node/reject") {

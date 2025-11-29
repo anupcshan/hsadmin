@@ -1254,3 +1254,107 @@ func TestDeleteMachine_UI(t *testing.T) {
 
 	t.Logf("✓ Machine successfully deleted from Headscale (ID: %d)", machineID)
 }
+
+// TestExpireMachine_UI tests the expire machine key functionality end-to-end
+func TestExpireMachine_UI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping UI test in short mode")
+	}
+	t.Parallel()
+
+	fixture := setupUITest(t)
+
+	// Create a separate test machine that we can safely expire
+	err := fixture.testEnv.StartTailscaleClient(t, "test-machine-to-expire")
+	require.NoError(t, err)
+
+	// Wait for the new machine to register
+	var machineID uint64
+	var machineName string
+	require.Eventually(t, func() bool {
+		nodesResp, err := fixture.testEnv.GetHeadscaleClient().ListNodes(fixture.ctx, &headscale.ListNodesRequest{})
+		if err != nil {
+			return false
+		}
+		// Find the machine we just created
+		for _, node := range nodesResp.Nodes {
+			if node.GivenName == "test-machine-to-expire" {
+				machineID = node.Id
+				machineName = node.GivenName
+				return true
+			}
+		}
+		return false
+	}, 60*time.Second, 500*time.Millisecond, "Timeout waiting for test machine to register")
+
+	t.Logf("Machine to expire: %s (ID: %d)", machineName, machineID)
+
+	// Verify the machine key is NOT expired before we expire it
+	nodeResp, err := fixture.testEnv.GetHeadscaleClient().GetNode(fixture.ctx, &headscale.GetNodeRequest{
+		NodeId: machineID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, nodeResp.Node.Expiry, "Node should have an expiry time")
+
+	// Navigate to machines page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/machines")
+
+	// Open the dropdown menu, click "Expire key", and wait for modal
+	OpenAndClickDropdownItemInRowByText(t, page, machineName,
+		`[data-testid="machine-menu-button"]`,
+		`[data-testid="machine-menu-expire"]`,
+		`#expireMachineModal`)
+	expireModal := page.MustElement(`#expireMachineModal`)
+
+	// Verify the modal shows the correct machine name
+	machineNameField := expireModal.MustElement(`#expireMachineName`)
+	actualName := machineNameField.MustProperty("value").String()
+	require.Equal(t, machineName, actualName, "Modal should display the correct machine name")
+
+	// Verify the warning message is present
+	warningText := expireModal.MustHTML()
+	require.Contains(t, warningText, "re-authenticate", "Modal should mention re-authentication")
+
+	// Wait for JavaScript htmx.process() to complete by checking the attribute is set
+	require.Eventually(t, func() bool {
+		form, err := page.Element(`#expireMachineForm`)
+		if err != nil || form == nil {
+			return false
+		}
+		hxPost, err := form.Attribute("hx-post")
+		if err != nil {
+			return false
+		}
+		expectedURL := "/machines/" + fmt.Sprint(machineID) + "/expire"
+		return hxPost != nil && *hxPost == expectedURL
+	}, 5*time.Second, 100*time.Millisecond, "Form hx-post attribute should be set to correct URL by JavaScript")
+
+	// Verify the expire button is styled with warning color (yellow)
+	submitButton := page.MustElement(`[data-testid="expire-submit"]`)
+	require.Contains(t, submitButton.MustHTML(), "bg-yellow-600", "Expire button should have yellow background")
+
+	// Click the "Expire Key" button to actually expire the key
+	submitButton.MustClick()
+
+	// Wait for the redirect back to machines list
+	WaitForURL(t, page, fixture.serverURL+"/machines", 15*time.Second)
+
+	// Verify the machine key was expired in Headscale
+	// The Expiry time should now be in the past
+	require.Eventually(t, func() bool {
+		nodeResp, err := fixture.testEnv.GetHeadscaleClient().GetNode(fixture.ctx, &headscale.GetNodeRequest{
+			NodeId: machineID,
+		})
+		if err != nil {
+			return false
+		}
+		// After ExpireNode, the expiry should be in the past
+		if nodeResp.Node.Expiry == nil {
+			return false
+		}
+		expiry := nodeResp.Node.Expiry.AsTime()
+		return expiry.Before(time.Now())
+	}, 15*time.Second, 200*time.Millisecond, "Machine key should be expired (expiry in the past)")
+
+	t.Logf("✓ Machine key successfully expired (ID: %d)", machineID)
+}
