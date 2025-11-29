@@ -679,7 +679,7 @@ go fmt ./...
 go vet ./...
 
 # Run comprehensive linting (uses go tool to ensure consistent version)
-go tool golangci-lint run --disable errcheck
+go tool golangci-lint run
 
 # Run tests with race detector (critical for concurrent code)
 go test -race -short ./...
@@ -702,7 +702,7 @@ go test -race ./test/integration
 **Before committing:**
 1. Format code: `go fmt ./...`
 2. Run static analysis: `go vet ./...`
-3. Run linting: `go tool golangci-lint run --disable errcheck`
+3. Run linting: `go tool golangci-lint run`
 4. Run unit tests with race detection: `go test -race -short ./...`
 5. Run integration tests with race detection: `go test -race ./test/integration`
 6. If templates changed, update golden files: `go test ./test/integration -update`
@@ -782,7 +782,7 @@ go fmt ./...
 go vet ./...
 
 # Linting (recommended before commit)
-go tool golangci-lint run --disable errcheck
+go tool golangci-lint run
 
 # Test everything
 go test ./...

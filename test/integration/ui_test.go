@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1027,6 +1028,10 @@ func setupBrowser(t *testing.T, ctx context.Context) *rod.Browser {
 	t.Helper()
 
 	l := launcher.New().Headless(true).UserDataDir(filepath.Join(t.TempDir(), "browser"))
+	// Disable sandbox in CI environments (GitHub Actions sets CI=true)
+	if os.Getenv("CI") != "" {
+		l = l.NoSandbox(true)
+	}
 	t.Cleanup(l.Cleanup)
 
 	url := l.MustLaunch()
