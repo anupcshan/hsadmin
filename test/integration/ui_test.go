@@ -184,6 +184,62 @@ func TestRenameUser_UI(t *testing.T) {
 	t.Logf("✓ User successfully renamed from '%s' to '%s'", originalName, newName)
 }
 
+// TestCreateUser_UI tests the create user functionality end-to-end
+func TestCreateUser_UI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping UI test in short mode")
+	}
+	t.Parallel()
+
+	fixture := setupUITest(t)
+
+	// Verify we start with one user
+	usersResp, err := fixture.testEnv.GetHeadscaleClient().ListUsers(fixture.ctx, &headscale.ListUsersRequest{})
+	require.NoError(t, err)
+	require.Len(t, usersResp.Users, 1, "Should start with exactly one user")
+	t.Logf("Starting with %d user(s)", len(usersResp.Users))
+
+	// Navigate to users page with screenshot on failure
+	page := SetupPageWithScreenshot(t, fixture.browser, fixture.serverURL+"/users")
+
+	// Click the "Create a user" button to open the modal
+	createButton := page.MustElement(`[data-testid="create-user-button"]`)
+	createButton.MustClick()
+
+	// Wait for the modal to appear
+	WaitForVisible(t, page, `[data-testid="create-user-modal"]`)
+	createModal := page.MustElement(`[data-testid="create-user-modal"]`)
+
+	// Fill in the new user name
+	newUserName := "new-test-user"
+	nameInput := createModal.MustElement(`[data-testid="create-user-input"]`)
+	nameInput.MustInput(newUserName)
+
+	// Submit the form
+	submitButton := createModal.MustElement(`[data-testid="create-user-submit"]`)
+	submitButton.MustClick()
+
+	// Wait for the modal to close (HTMX success handler closes it)
+	WaitForElementToDisappear(t, page, `dialog[open]`, "", 15*time.Second)
+
+	// Verify via API that the user was created
+	usersResp, err = fixture.testEnv.GetHeadscaleClient().ListUsers(fixture.ctx, &headscale.ListUsersRequest{})
+	require.NoError(t, err)
+	require.Len(t, usersResp.Users, 2, "Should now have two users")
+
+	// Find the new user
+	var newUser *headscale.User
+	for _, user := range usersResp.Users {
+		if user.Name == newUserName {
+			newUser = user
+			break
+		}
+	}
+	require.NotNil(t, newUser, "New user should exist in the API response")
+
+	t.Logf("✓ User '%s' successfully created with ID %d", newUserName, newUser.Id)
+}
+
 // TestGeneratePreAuthKey_UI tests the preauth key generation functionality end-to-end
 func TestGeneratePreAuthKey_UI(t *testing.T) {
 	if testing.Short() {
