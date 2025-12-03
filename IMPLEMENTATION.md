@@ -5,7 +5,7 @@ Build a full-featured web admin interface for Headscale (self-hosted Tailscale c
 
 ## Progress Summary
 
-**Overall Completion:** ~87% complete (9/11 phases complete, 1 partial, 1 not started)
+**Overall Completion:** ~90% complete (9/10 applicable phases complete, 1 partial)
 
 | Phase | Status | Completion |
 |-------|--------|------------|
@@ -15,13 +15,13 @@ Build a full-featured web admin interface for Headscale (self-hosted Tailscale c
 | Phase 4: Machine Detail View | ✅ Complete | 100% |
 | Phase 5: User Management | ✅ Complete | 100% |
 | Phase 6: Node Actions | ✅ Complete | 100% |
-| Phase 7: ACL Editor | ⏸️ Not Started | 0% |
+| Phase 7: ACL Editor | ⏭️ Skipped | N/A (managed via config) |
 | Phase 8: Real-time Updates (SSE) | ✅ Complete | 100% |
 | Phase 9: Testing Infrastructure | ✅ Complete | 100% |
 | Phase 10: Polish & Production | 🔄 Partial | 30% |
 | Phase 11: Authentication & Authorization | ✅ Complete | 100% |
 
-**The application is production-ready** with comprehensive authentication, real-time updates, and full machine/user management. Missing: ACL editor.
+**The application is production-ready** with comprehensive authentication, real-time updates, and full machine/user management.
 
 ## Code Quality & Technical Debt
 
@@ -161,9 +161,11 @@ The application is **production-ready** for Headscale management:
 
 ### What's Next 📋
 
-**Priority features for full feature parity:**
-1. **ACL Editor** - Web-based policy editor with syntax highlighting (Phase 7 - not started)
-2. **Polish & Production** - Loading states, Dockerfile, documentation (Phase 10 - partial)
+**Remaining work:**
+1. **Polish & Production** (Phase 10 - 30%) - Loading states, Dockerfile, documentation
+
+**Intentionally skipped:**
+- **ACL Editor** (Phase 7) - ACLs managed via config files, not web UI
 
 **Config file structure** (`hsadmin.yaml`):
 ```yaml
@@ -507,16 +509,8 @@ Replicate Tailscale's ACL editor:
 - [x] Browser automation test verifying end-to-end key expiration
 - [x] Update machine detail view after actions - handled by SSE
 
-### Phase 7: ACL Editor Page
-- [ ] Create acl.go handler file
-- [ ] Create acl.html template
-- [ ] Integrate code editor (Monaco or CodeMirror)
-- [ ] Implement GET /acl handler (GetPolicy API)
-- [ ] Implement POST /acl handler (SetPolicy API)
-- [ ] Add JSON validation
-- [ ] Build confirmation modal with diff
-- [ ] Add success/error notifications
-- [ ] Add navigation item for "Access Controls"
+### Phase 7: ACL Editor Page ⏭️ SKIPPED
+**Decision:** ACLs are managed via Headscale config files, not the web UI. The Headscale API only provides basic `GetPolicy`/`SetPolicy` (raw JSON string) with no validation or diff support. A web editor adds minimal value over `headscale policy get`.
 
 ### Phase 8: Real-time Updates & Data Infrastructure ✅ COMPLETE
 - [x] Build SSE event broker (hub pattern in internal/events/broker.go)
