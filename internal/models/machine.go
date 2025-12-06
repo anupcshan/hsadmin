@@ -405,13 +405,6 @@ func (m *Machine) ClientConnectivity() map[string]string {
 				result["Varies"] = "—"
 			}
 
-			// Hairpinning
-			if hairpin, ok := netInfo.HairPinning().Get(); ok {
-				result["Hairpinning"] = boolToYesNo(hairpin)
-			} else {
-				result["Hairpinning"] = "—"
-			}
-
 			// IPv6 - WorkingIPv6
 			if ipv6, ok := netInfo.WorkingIPv6().Get(); ok {
 				result["IPv6"] = boolToYesNo(ipv6)
