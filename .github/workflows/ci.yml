@@ -49,3 +49,15 @@ jobs:
           name: test-screenshots
           path: test/integration/.testoutput/screenshots/
           retention-days: 7
+
+  nix-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+
+      - name: Build with Nix
+        run: nix build

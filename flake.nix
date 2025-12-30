@@ -2,7 +2,7 @@
   description = "hsadmin - Web-based admin interface for Headscale";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -102,7 +102,7 @@
 
             # This will need to be updated when dependencies change
             # Run: nix build .#hsadmin 2>&1 | grep "got:" to get the correct hash
-            vendorHash = "sha256-b4ic+gz+tZZ85WEoil0gvcDJolnCRpUsxJ9jS9Fuxrw=";
+            vendorHash = "sha256-2fVcuyDswpJX/ucAU1sJKDlGwJ7ResIpEc43ATYXi8Y=";
 
             # Use pure Go implementations
             tags = [ "osusergo" "netgo" ];
