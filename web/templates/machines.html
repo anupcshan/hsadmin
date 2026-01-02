@@ -1,5 +1,3 @@
-{{define "title"}}Machines - Headscale Admin{{end}}
-
 {{/* SSE Partial Templates */}}
 {{define "machine-status-badge"}}
 <span class="inline-block w-2 h-2 rounded-full {{.Machine.StatusDotClass}} mr-2"></span>
@@ -524,7 +522,7 @@ document.addEventListener('click', function(event) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{template "title" .}}</title>
+    <title>Machines - Headscale Admin</title>
     <script src="/static/js/tailwind-3.4.17.js"></script>
     <script src="/static/js/htmx-1.9.10.min.js"></script>
     <script src="/static/js/htmx-sse-1.9.10.js"></script>
