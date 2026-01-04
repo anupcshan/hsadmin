@@ -46,82 +46,8 @@
     </header>
 
     <!-- Subnets Section -->
-    <section class="mb-8">
-        <header class="max-w-xl mb-4">
-            <h3 class="text-xl font-semibold tracking-tight mb-2">Subnets</h3>
-            <p class="text-gray-400">Subnets let you expose physical network routes onto Tailscale. <a href="#" class="text-blue-400 hover:text-blue-300">Learn more</a></p>
-        </header>
-        {{if .Machine.HasSubnetRoutes}}
-        <div class="p-4 md:p-6 border border-gray-700 bg-gray-800 rounded-md grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Approved Subnets -->
-            <div>
-                <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
-                    Approved
-                    <svg class="w-4 h-4 text-gray-400 info-icon" fill="currentColor" viewBox="0 0 20 20" title="These routes are approved and active">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                    </svg>
-                </h4>
-                {{$approvedRoutes := .Machine.ApprovedSubnets}}
-                {{if $approvedRoutes}}
-                <div class="space-y-2">
-                    {{range $approvedRoutes}}
-                    <div class="flex items-center justify-between gap-2">
-                        <span class="text-sm font-mono">{{.}}</span>
-                        <form method="POST" action="/machines/{{$.Machine.ID}}/routes/subnets/reject" class="inline">
-                            <input type="hidden" name="route" value="{{.}}">
-                            <button type="submit" class="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 border border-gray-600 text-gray-200">
-                                Reject
-                            </button>
-                        </form>
-                    </div>
-                    {{end}}
-                </div>
-                {{else}}
-                <div class="text-sm text-gray-400">—</div>
-                {{end}}
-            </div>
-
-            <!-- Awaiting Approval -->
-            <div>
-                <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
-                    Awaiting Approval
-                    <svg class="w-4 h-4 text-gray-400 info-icon" fill="currentColor" viewBox="0 0 20 20" title="These routes are advertised but not yet approved">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                    </svg>
-                </h4>
-                {{$pendingRoutes := .Machine.AdvertisedSubnets}}
-                {{if $pendingRoutes}}
-                <div class="space-y-2">
-                    {{range $pendingRoutes}}
-                    <div class="flex items-center justify-between gap-2">
-                        <span class="text-sm font-mono">{{.}}</span>
-                        <div class="flex gap-1">
-                            <form method="POST" action="/machines/{{$.Machine.ID}}/routes/subnets/approve" class="inline">
-                                <input type="hidden" name="route" value="{{.}}">
-                                <button type="submit" class="px-2 py-0.5 text-xs rounded bg-green-700 hover:bg-green-600 border border-green-600 text-white">
-                                    Approve
-                                </button>
-                            </form>
-                            <form method="POST" action="/machines/{{$.Machine.ID}}/routes/subnets/reject" class="inline">
-                                <input type="hidden" name="route" value="{{.}}">
-                                <button type="submit" class="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 border border-gray-600 text-gray-200">
-                                    Reject
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                    {{end}}
-                </div>
-                {{else}}
-                <div class="text-sm text-gray-400">—</div>
-                {{end}}
-            </div>
-        </div>
-        {{else}}
-        <div class="p-8 border border-gray-700 bg-gray-800 rounded-md text-center text-gray-400">
-            This machine does not expose any routes.
-        </div>
-        {{end}}
+    <section id="machine-subnets-{{.Machine.ID}}" class="mb-8" sse-swap="machineSubnets" hx-swap="innerHTML">
+        {{template "machine-subnets" .}}
     </section>
 
     <!-- Routing Settings Section -->
@@ -405,6 +331,84 @@
         </div>
     </section>
 </section>
+{{end}}
+
+{{define "machine-subnets"}}
+        <header class="max-w-xl mb-4">
+            <h3 class="text-xl font-semibold tracking-tight mb-2">Subnets</h3>
+            <p class="text-gray-400">Subnets let you expose physical network routes onto Tailscale. <a href="#" class="text-blue-400 hover:text-blue-300">Learn more</a></p>
+        </header>
+        {{if .Machine.HasSubnetRoutes}}
+        <div class="p-4 md:p-6 border border-gray-700 bg-gray-800 rounded-md grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Approved Subnets -->
+            <div>
+                <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                    Approved
+                    <svg class="w-4 h-4 text-gray-400 info-icon" fill="currentColor" viewBox="0 0 20 20" title="These routes are approved and active">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                </h4>
+                {{$approvedRoutes := .Machine.ApprovedSubnets}}
+                {{if $approvedRoutes}}
+                <div class="space-y-2">
+                    {{range $approvedRoutes}}
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-mono">{{.}}</span>
+                        <form method="POST" action="/machines/{{$.Machine.ID}}/routes/subnets/reject" class="inline">
+                            <input type="hidden" name="route" value="{{.}}">
+                            <button type="submit" class="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 border border-gray-600 text-gray-200">
+                                Reject
+                            </button>
+                        </form>
+                    </div>
+                    {{end}}
+                </div>
+                {{else}}
+                <div class="text-sm text-gray-400">—</div>
+                {{end}}
+            </div>
+
+            <!-- Awaiting Approval -->
+            <div>
+                <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                    Awaiting Approval
+                    <svg class="w-4 h-4 text-gray-400 info-icon" fill="currentColor" viewBox="0 0 20 20" title="These routes are advertised but not yet approved">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                </h4>
+                {{$pendingRoutes := .Machine.AdvertisedSubnets}}
+                {{if $pendingRoutes}}
+                <div class="space-y-2">
+                    {{range $pendingRoutes}}
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-mono">{{.}}</span>
+                        <div class="flex gap-1">
+                            <form method="POST" action="/machines/{{$.Machine.ID}}/routes/subnets/approve" class="inline">
+                                <input type="hidden" name="route" value="{{.}}">
+                                <button type="submit" class="px-2 py-0.5 text-xs rounded bg-green-700 hover:bg-green-600 border border-green-600 text-white">
+                                    Approve
+                                </button>
+                            </form>
+                            <form method="POST" action="/machines/{{$.Machine.ID}}/routes/subnets/reject" class="inline">
+                                <input type="hidden" name="route" value="{{.}}">
+                                <button type="submit" class="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 border border-gray-600 text-gray-200">
+                                    Reject
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                {{else}}
+                <div class="text-sm text-gray-400">—</div>
+                {{end}}
+            </div>
+        </div>
+        {{else}}
+        <div class="p-8 border border-gray-700 bg-gray-800 rounded-md text-center text-gray-400">
+            This machine does not expose any routes.
+        </div>
+        {{end}}
 {{end}}
 
 {{define "machine_detail.html"}}

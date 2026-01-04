@@ -224,6 +224,118 @@ func TestSSE_MachineDeletion(t *testing.T) {
 	t.Logf("✓ Machine %s disappeared via SSE without page refresh", hostname)
 }
 
+// TestSSE_SubnetRouteChange tests that advertised subnet routes appear via SSE on machine detail page
+func TestSSE_SubnetRouteChange(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping SSE test in short mode")
+	}
+	t.Parallel()
+
+	fixture := setupUITest(t)
+	ctx := fixture.ctx
+
+	// Start a tailscale client
+	hostname := fmt.Sprintf("subnet-sse-test-%d", time.Now().Unix())
+	t.Logf("Starting tailscale client: %s", hostname)
+	err := fixture.testEnv.StartTailscaleClient(t, hostname)
+	require.NoError(t, err)
+
+	// Wait for machine to be registered and get its ID and container
+	var machineID uint64
+	var clientContainer *dockertest.Resource
+	require.Eventually(t, func() bool {
+		nodesResp, err := fixture.testEnv.GetHeadscaleClient().ListNodes(ctx, &headscale.ListNodesRequest{})
+		if err != nil {
+			return false
+		}
+		for _, node := range nodesResp.Nodes {
+			if node.GivenName == hostname {
+				machineID = node.Id
+				// Find the container
+				for i := range fixture.testEnv.tailscaleClients {
+					if fixture.testEnv.tailscaleClients[i].Container.Config.Hostname == hostname {
+						clientContainer = fixture.testEnv.tailscaleClients[i]
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}, 30*time.Second, 500*time.Millisecond, "Machine should be registered")
+	require.NotNil(t, clientContainer, "Container should be found")
+
+	t.Logf("Machine registered with ID: %d", machineID)
+
+	// Navigate to machine detail page BEFORE advertising routes
+	page := SetupPageWithScreenshot(t, fixture.browser, fmt.Sprintf("%s/machines/%d", fixture.serverURL, machineID))
+
+	// Verify the subnets section shows "does not expose any routes" initially
+	require.Eventually(t, func() bool {
+		bodyText, err := page.MustElement("body").Text()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(bodyText, "does not expose any routes")
+	}, 10*time.Second, 500*time.Millisecond, "Should show no routes initially")
+	t.Log("✓ Page shows no routes initially")
+
+	// Now advertise subnet routes (this should trigger SSE update)
+	t.Log("Advertising subnet routes via tailscale set...")
+	exitCode, err := clientContainer.Exec(
+		[]string{"tailscale", "set", "--advertise-routes=10.99.0.0/24,172.16.0.0/16"},
+		dockertest.ExecOptions{},
+	)
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode, "tailscale set command should succeed")
+
+	// Wait for routes to be reflected in Headscale API
+	require.Eventually(t, func() bool {
+		nodeResp, err := fixture.testEnv.GetHeadscaleClient().GetNode(ctx, &headscale.GetNodeRequest{
+			NodeId: machineID,
+		})
+		if err != nil {
+			return false
+		}
+		for _, route := range nodeResp.Node.AvailableRoutes {
+			if route == "10.99.0.0/24" {
+				t.Logf("Routes now in API: %v", nodeResp.Node.AvailableRoutes)
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 500*time.Millisecond, "Routes should be in API")
+
+	// Wait for SSE to update the subnets section (WITHOUT page refresh)
+	// The routes should appear in the "Awaiting Approval" section
+	t.Log("Waiting for SSE to update subnets section...")
+	require.Eventually(t, func() bool {
+		// Query the subnets section specifically
+		subnetsSection, err := page.Element(fmt.Sprintf("#machine-subnets-%d", machineID))
+		if err != nil || subnetsSection == nil {
+			return false
+		}
+		sectionText, err := subnetsSection.Text()
+		if err != nil {
+			return false
+		}
+		has1099 := strings.Contains(sectionText, "10.99.0.0/24")
+		has172 := strings.Contains(sectionText, "172.16.0.0/16")
+		if has1099 && has172 {
+			t.Log("✓ Both routes appeared in subnets section via SSE")
+			return true
+		}
+		return false
+	}, 20*time.Second, 1*time.Second, "Routes should appear in subnets section via SSE")
+
+	// Verify "does not expose any routes" is no longer shown
+	bodyText, err := page.MustElement("body").Text()
+	require.NoError(t, err)
+	require.NotContains(t, bodyText, "does not expose any routes",
+		"Should no longer show 'no routes' message after SSE update")
+
+	t.Log("✓ Subnet routes appeared via SSE without page refresh")
+}
+
 // TestSSE_MultipleChanges tests that multiple rapid changes are handled correctly
 func TestSSE_MultipleChanges(t *testing.T) {
 	if testing.Short() {

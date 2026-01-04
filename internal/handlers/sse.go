@@ -19,11 +19,12 @@ import (
 
 // MachineState represents the state of a machine for change detection
 type MachineState struct {
-	ID              uint64
-	Online          bool
-	ApprovedRoutes  sets.Set[string]
-	ExitNodeEnabled bool
-	Tags            sets.Set[string]
+	ID               uint64
+	Online           bool
+	ApprovedRoutes   sets.Set[string]
+	AdvertisedRoutes sets.Set[string]
+	ExitNodeEnabled  bool
+	Tags             sets.Set[string]
 }
 
 // UserState represents the state of a user for change detection
@@ -210,22 +211,57 @@ func detectMachineChanges(current, previous map[uint64]*MachineState) bool {
 	return false
 }
 
-// pollMachineChanges detects changes in machine state and broadcasts updates if changed
-// Returns the new state map to be used in the next poll cycle
-func (h *SSEHandler) pollMachineChanges(ctx context.Context, machines []*models.Machine, users []*headscale.User, previousStates map[uint64]*MachineState) map[uint64]*MachineState {
-	// Build current state map
-	currentStates := make(map[uint64]*MachineState)
-	for _, m := range machines {
-		currentStates[m.ID()] = &MachineState{
-			ID:              m.ID(),
-			Online:          m.Online,
-			ApprovedRoutes:  sets.FromSlice(m.ApprovedSubnets()),
-			ExitNodeEnabled: m.ExitNodeStatus() == "Approved",
-			Tags:            sets.FromSlice(m.Tags()),
+// detectMachineRouteChanges returns the list of machine IDs that had route changes
+// (either approved or advertised routes changed)
+func detectMachineRouteChanges(current, previous map[uint64]*MachineState) []uint64 {
+	var changedIDs []uint64
+
+	for id, curr := range current {
+		prev, exists := previous[id]
+		if !exists {
+			// New machine - don't broadcast subnets update (it's a new machine)
+			continue
+		}
+
+		routesChanged := !curr.ApprovedRoutes.Equals(prev.ApprovedRoutes) ||
+			!curr.AdvertisedRoutes.Equals(prev.AdvertisedRoutes)
+
+		if routesChanged {
+			log.Printf("SSE: Machine %d routes changed", id)
+			changedIDs = append(changedIDs, id)
 		}
 	}
 
-	// Detect and broadcast changes
+	return changedIDs
+}
+
+// pollMachineChanges detects changes in machine state and broadcasts updates if changed
+// Returns the new state map to be used in the next poll cycle
+func (h *SSEHandler) pollMachineChanges(ctx context.Context, machines []*models.Machine, users []*headscale.User, previousStates map[uint64]*MachineState) map[uint64]*MachineState {
+	// Build current state map and machine lookup
+	currentStates := make(map[uint64]*MachineState)
+	machinesByID := make(map[uint64]*models.Machine)
+	for _, m := range machines {
+		currentStates[m.ID()] = &MachineState{
+			ID:               m.ID(),
+			Online:           m.Online,
+			ApprovedRoutes:   sets.FromSlice(m.ApprovedSubnets()),
+			AdvertisedRoutes: sets.FromSlice(m.AdvertisedSubnets()),
+			ExitNodeEnabled:  m.ExitNodeStatus() == "Approved",
+			Tags:             sets.FromSlice(m.Tags()),
+		}
+		machinesByID[m.ID()] = m
+	}
+
+	// Detect machines with route changes and broadcast subnets updates
+	changedMachineIDs := detectMachineRouteChanges(currentStates, previousStates)
+	for _, machineID := range changedMachineIDs {
+		if machine, ok := machinesByID[machineID]; ok {
+			h.broadcastMachineSubnetsUpdate(machine)
+		}
+	}
+
+	// Detect and broadcast full table changes
 	if detectMachineChanges(currentStates, previousStates) {
 		h.broadcastMachinesTableUpdate(ctx, machines, users)
 	}
@@ -319,6 +355,27 @@ func (h *SSEHandler) broadcastUsersTableUpdate(ctx context.Context, users []*hea
 	h.broker.Broadcast(events.Event{
 		Type: "usersTable",
 		HTML: html,
+	})
+}
+
+// broadcastMachineSubnetsUpdate sends a subnets section update for a specific machine
+func (h *SSEHandler) broadcastMachineSubnetsUpdate(machine *models.Machine) {
+	log.Printf("SSE: Broadcasting subnets update for machine %d", machine.ID())
+
+	var buf bytes.Buffer
+	data := map[string]interface{}{
+		"Machine": machine,
+	}
+
+	if err := h.templates.ExecuteTemplate(&buf, "machine-subnets", data); err != nil {
+		log.Printf("SSE: Error rendering machine subnets: %v", err)
+		return
+	}
+
+	// Send the inner HTML content - the sse-swap on the section will replace its innerHTML
+	h.broker.Broadcast(events.Event{
+		Type: "machineSubnets",
+		HTML: buf.String(),
 	})
 }
 
