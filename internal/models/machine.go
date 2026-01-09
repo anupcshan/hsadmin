@@ -565,6 +565,17 @@ func (m *Machine) HasExitNode() bool {
 	return m.ExitNodeApproved() || m.ExitNodeAdvertised()
 }
 
+// IsAppConnector returns whether this machine is running as an app connector.
+// This data is only available for online machines via tsnet WhoIs().
+func (m *Machine) IsAppConnector() bool {
+	if m.WhoIsNode != nil && m.WhoIsNode.Hostinfo.Valid() {
+		if appConnector, ok := m.WhoIsNode.Hostinfo.AppConnector().Get(); ok {
+			return appConnector
+		}
+	}
+	return false
+}
+
 // TagsString returns tags as a comma-separated string
 func (m *Machine) TagsString() string {
 	tags := m.Tags()

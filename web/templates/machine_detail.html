@@ -37,6 +37,9 @@
                     {{else if .Machine.HasSubnetRoutes}}
                     <span class="inline-flex items-center px-2 py-1 rounded-sm text-xs bg-blue-900 text-blue-300 border border-blue-700">Subnets</span>
                     {{end}}
+                    {{if .Machine.IsAppConnector}}
+                    <span class="inline-flex items-center px-2 py-1 rounded-sm text-xs bg-blue-900 text-blue-300 border border-blue-700">App Connector</span>
+                    {{end}}
                     {{range .Machine.Tags}}
                     <span class="inline-flex items-center px-2 py-1 rounded-sm text-xs bg-gray-700 text-gray-300 border border-gray-600">{{.}}</span>
                     {{end}}

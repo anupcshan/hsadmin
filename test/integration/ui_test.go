@@ -1255,6 +1255,81 @@ func TestDeleteMachine_UI(t *testing.T) {
 	t.Logf("✓ Machine successfully deleted from Headscale (ID: %d)", machineID)
 }
 
+// TestAppConnectorBadge_UI tests that the App Connector badge appears when a machine is running as an app connector
+func TestAppConnectorBadge_UI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping UI test in short mode")
+	}
+	t.Parallel()
+
+	fixture := setupUITest(t)
+
+	// Start a tailscale client that will be configured as an app connector
+	err := fixture.testEnv.StartTailscaleClient(t, "app-connector-test")
+	require.NoError(t, err)
+
+	// Wait for the machine to register
+	var machineID uint64
+	require.Eventually(t, func() bool {
+		nodesResp, err := fixture.testEnv.GetHeadscaleClient().ListNodes(fixture.ctx, &headscale.ListNodesRequest{})
+		if err != nil || len(nodesResp.Nodes) == 0 {
+			return false
+		}
+		// Find our app-connector-test machine
+		for _, node := range nodesResp.Nodes {
+			if node.GivenName == "app-connector-test" {
+				machineID = node.Id
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second, 500*time.Millisecond, "Timeout waiting for app-connector-test machine to register")
+
+	t.Logf("Machine registered with ID: %d", machineID)
+
+	// Get the container resource for the tailscale client
+	var clientContainer *dockertest.Resource
+	for i := len(fixture.testEnv.tailscaleClients) - 1; i >= 0; i-- {
+		container := fixture.testEnv.tailscaleClients[i]
+		if container != nil {
+			clientContainer = container
+			break
+		}
+	}
+	require.NotNil(t, clientContainer, "Should have a tailscale client container")
+
+	// Enable app connector mode using tailscale set command
+	t.Log("Enabling app connector mode...")
+	exitCode, err := clientContainer.Exec([]string{"tailscale", "set", "--advertise-connector"}, dockertest.ExecOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 0, exitCode, "tailscale set --advertise-connector command should succeed")
+
+	// Navigate to machines list page and wait for the App Connector badge to appear
+	page := fixture.browser.MustPage(fixture.serverURL + "/machines")
+	defer page.MustClose()
+	page.MustWaitLoad()
+
+	// Poll the page until the App Connector badge appears (hostinfo update may take a moment to propagate)
+	require.Eventually(t, func() bool {
+		page.MustReload()
+		page.MustWaitLoad()
+		bodyText := page.MustElement("body").MustText()
+		return strings.Contains(bodyText, "App Connector")
+	}, 30*time.Second, 1*time.Second, "Timeout waiting for App Connector badge to appear in machines list")
+
+	t.Log("✓ App Connector badge shown in machines list")
+
+	// Navigate to machine detail page
+	page.MustNavigate(fixture.serverURL + "/machines/" + fmt.Sprint(machineID))
+	page.MustWaitLoad()
+
+	// Verify "App Connector" badge is shown in the machine detail page
+	bodyText := page.MustElement("body").MustText()
+	require.Contains(t, bodyText, "App Connector", "Should show App Connector badge in machine detail")
+
+	t.Log("✓ App Connector badge shown in machine detail page")
+}
+
 // TestExpireMachine_UI tests the expire machine key functionality end-to-end
 func TestExpireMachine_UI(t *testing.T) {
 	if testing.Short() {
